@@ -44,15 +44,17 @@ option (ENABLE_CLICKHOUSE_OBFUSCATOR "Table data obfuscator (convert real data t
 # https://clickhouse.com/docs/en/operations/utilities/odbc-bridge/
 # TODO Also needs NANODBC.
 if (ENABLE_ODBC AND NOT USE_MUSL)
-    option (ENABLE_CLICKHOUSE_ODBC_BRIDGE "HTTP-server working like a proxy to ODBC driver"
-        ${ENABLE_CLICKHOUSE_ALL})
+    option (ENABLE_CLICKHOUSE_ODBC_BRIDGE "HTTP-server working like a proxy to ODBC driver" ${ENABLE_CLICKHOUSE_ALL})
 else ()
     option (ENABLE_CLICKHOUSE_ODBC_BRIDGE "HTTP-server working like a proxy to ODBC driver" OFF)
 endif ()
 
 if (NOT USE_MUSL)
-    option (ENABLE_CLICKHOUSE_LIBRARY_BRIDGE "HTTP-server working like a proxy to Library dictionary source"
-        ${ENABLE_CLICKHOUSE_ALL})
+    option (ENABLE_CLICKHOUSE_LIBRARY_BRIDGE "HTTP-server working like a proxy to Library dictionary source" ${ENABLE_CLICKHOUSE_ALL})
+endif ()
+
+if (NOT USE_MUSL)
+    option (ENABLE_CATBOOST_BRIDGE "HTTP-server working like a proxy for CatBoost integration" ${ENABLE_CLICKHOUSE_ALL})
 endif ()
 
 # https://presentations.clickhouse.com/matemarketing_2020/
@@ -150,6 +152,12 @@ if (ENABLE_CLICKHOUSE_LIBRARY_BRIDGE)
     message(STATUS "Library bridge mode: ON")
 else()
     message(STATUS "Library bridge mode: OFF")
+endif()
+
+if (ENABLE_CATBOOST_BRIDGE)
+    message(STATUS "CatBoost bridge mode: ON")
+else()
+    message(STATUS "CatBoost bridge mode: OFF")
 endif()
 
 if (ENABLE_CLICKHOUSE_INSTALL)
@@ -260,6 +268,10 @@ endif ()
 
 if (ENABLE_CLICKHOUSE_LIBRARY_BRIDGE)
     add_subdirectory (library-bridge)
+endif ()
+
+if (ENABLE_CATBOOST_BRIDGE)
+    add_subdirectory (catboost-bridge)
 endif ()
 
 if (ENABLE_CLICKHOUSE_SELF_EXTRACTING)

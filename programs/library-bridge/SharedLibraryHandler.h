@@ -2,7 +2,7 @@
 
 #include <Common/SharedLibrary.h>
 #include <Common/logger_useful.h>
-#include "LibraryUtils.h"
+#include "SharedLibraryUtils.h"
 
 
 namespace DB
@@ -39,7 +39,7 @@ public:
     const Block & getSampleBlock() { return sample_block; }
 
 private:
-    Block dataToBlock(const ClickHouseLibrary::RawClickHouseLibraryTable data);
+    Block dataToBlock(SharedLibraryAPI::RawClickHouseLibraryTable data);
 
     std::string library_path;
     const Block sample_block;

@@ -6,6 +6,7 @@
 
 namespace DB
 {
+
 void PingHandler::handleRequest(HTTPServerRequest & /* request */, HTTPServerResponse & response)
 {
     try

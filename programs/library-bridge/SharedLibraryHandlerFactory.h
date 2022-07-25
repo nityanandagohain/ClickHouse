@@ -11,7 +11,7 @@ namespace DB
 {
 
 /// Each library dictionary source has unique UUID. When clone() method is called, a new UUID is generated.
-/// There is a unique mapping from diciotnary UUID to sharedLibraryHandler.
+/// There is a unique mapping from dictionary UUID to sharedLibraryHandler.
 class SharedLibraryHandlerFactory final : private boost::noncopyable
 {
 public:

@@ -38,10 +38,10 @@ LibraryBridgeHelper::LibraryBridgeHelper(
     , http_timeout(context_->getGlobalContext()->getSettingsRef().http_receive_timeout.value)
     , library_data(library_data_)
     , dictionary_id(dictionary_id_)
+    , bridge_host(config.getString("library_bridge.host", DEFAULT_HOST))
+    , bridge_port(config.getUInt("library_bridge.port", DEFAULT_PORT))
     , http_timeouts(ConnectionTimeouts::getHTTPTimeouts(context_))
 {
-    bridge_port = config.getUInt("library_bridge.port", DEFAULT_PORT);
-    bridge_host = config.getString("library_bridge.host", DEFAULT_HOST);
 }
 
 

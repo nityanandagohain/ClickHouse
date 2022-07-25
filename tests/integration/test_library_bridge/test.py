@@ -38,9 +38,6 @@ def ch_cluster():
     try:
         cluster.start()
         instance.query("CREATE DATABASE test")
-        container_lib_path = (
-            "/etc/clickhouse-server/config.d/dictionarites_lib/dict_lib.cpp"
-        )
 
         instance.copy_file_to_container(
             os.path.join(

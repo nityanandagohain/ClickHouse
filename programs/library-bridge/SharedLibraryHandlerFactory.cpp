@@ -4,6 +4,12 @@
 namespace DB
 {
 
+SharedLibraryHandlerFactory & SharedLibraryHandlerFactory::instance()
+{
+    static SharedLibraryHandlerFactory instance;
+    return instance;
+}
+
 SharedLibraryHandlerPtr SharedLibraryHandlerFactory::get(const std::string & dictionary_id)
 {
     std::lock_guard lock(mutex);
@@ -14,7 +20,6 @@ SharedLibraryHandlerPtr SharedLibraryHandlerFactory::get(const std::string & dic
 
     return nullptr;
 }
-
 
 void SharedLibraryHandlerFactory::create(
     const std::string & dictionary_id,
@@ -30,7 +35,6 @@ void SharedLibraryHandlerFactory::create(
         LOG_WARNING(&Poco::Logger::get("SharedLibraryHandlerFactory"), "Library handler with dictionary id {} already exists", dictionary_id);
 }
 
-
 bool SharedLibraryHandlerFactory::clone(const std::string & from_dictionary_id, const std::string & to_dictionary_id)
 {
     std::lock_guard lock(mutex);
@@ -44,19 +48,11 @@ bool SharedLibraryHandlerFactory::clone(const std::string & from_dictionary_id, 
     return true;
 }
 
-
 bool SharedLibraryHandlerFactory::remove(const std::string & dictionary_id)
 {
     std::lock_guard lock(mutex);
     /// libDelete is called in destructor.
     return library_handlers.erase(dictionary_id);
-}
-
-
-SharedLibraryHandlerFactory & SharedLibraryHandlerFactory::instance()
-{
-    static SharedLibraryHandlerFactory ret;
-    return ret;
 }
 
 }

@@ -11,7 +11,7 @@
 namespace DB
 {
 
-/// Class represents base for clickhouse-odbc-bridge and clickhouse-library-bridge servers.
+/// Class represents base for clickhouse-odbc-bridge, clickhouse-library-bridge and catboost-bridge servers.
 /// Listens to incoming HTTP POST and GET requests on specified port and host.
 /// Has two handlers '/' for all incoming POST requests and /ping for GET request about service status.
 class IBridge : public BaseDaemon
