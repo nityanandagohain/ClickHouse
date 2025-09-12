@@ -26,9 +26,12 @@ SerializationObject::SerializationObject(
     std::unordered_map<String, SerializationPtr> typed_path_serializations_,
     const std::unordered_set<String> & paths_to_skip_,
     const std::vector<String> & path_regexps_to_skip_,
+    const std::unordered_set<String> & paths_shared_only_,
+    const std::vector<String> & path_regexps_shared_only_,
     const DataTypePtr & dynamic_type_)
     : typed_path_serializations(std::move(typed_path_serializations_))
     , paths_to_skip(paths_to_skip_)
+    , paths_shared_only(paths_shared_only_)
     , dynamic_type(dynamic_type_)
     , dynamic_serialization(dynamic_type_->getDefaultSerialization())
 {
@@ -41,6 +44,11 @@ SerializationObject::SerializationObject(
     std::sort(sorted_paths_to_skip.begin(), sorted_paths_to_skip.end());
     for (const auto & regexp_str : path_regexps_to_skip_)
         path_regexps_to_skip.emplace_back(regexp_str);
+    
+    sorted_paths_shared_only.assign(paths_shared_only.begin(), paths_shared_only.end());
+    std::sort(sorted_paths_shared_only.begin(), sorted_paths_shared_only.end());
+    for (const auto & regexp_str : path_regexps_shared_only_)
+        path_regexps_shared_only.emplace_back(regexp_str);
 }
 
 bool SerializationObject::shouldSkipPath(const String & path) const
@@ -53,6 +61,24 @@ bool SerializationObject::shouldSkipPath(const String & path) const
         return true;
 
     for (const auto & regexp : path_regexps_to_skip)
+    {
+        if (re2::RE2::FullMatch(path, regexp))
+            return true;
+    }
+
+    return false;
+}
+
+bool SerializationObject::shouldForceSharedOnly(const String & path) const
+{
+    if (paths_shared_only.contains(path))
+        return true;
+
+    auto it = std::lower_bound(sorted_paths_shared_only.begin(), sorted_paths_shared_only.end(), path);
+    if (it != sorted_paths_shared_only.end() && it != sorted_paths_shared_only.begin() && path.starts_with(*std::prev(it)))
+        return true;
+
+    for (const auto & regexp : path_regexps_shared_only)
     {
         if (re2::RE2::FullMatch(path, regexp))
             return true;
@@ -1217,6 +1243,16 @@ void SerializationObject::deserializeBinary(IColumn & col, ReadBuffer & istr, co
                     }
 
                     dynamic_serialization->deserializeBinary(*dynamic_it->second, istr, settings);
+                }
+                /// Check if this path should be forced to shared data (SHARED_ONLY).
+                else if (shouldForceSharedOnly(path))
+                {
+                    String value;
+                    Field field;
+                    readParsedValueIntoString(value, istr, [&](ReadBuffer & buf){ dynamic_serialization->deserializeBinary(field, buf, settings); });
+                    /// Don't write nulls into shared data.
+                    if (!field.isNull())
+                        paths_and_values_for_shared_data.emplace_back(std::move(path), std::move(value));
                 }
                 /// Try to add a new dynamic paths.
                 else if (auto * dynamic_column = column_object.tryToAddNewDynamicPath(path))

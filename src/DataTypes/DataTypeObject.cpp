@@ -57,12 +57,16 @@ DataTypeObject::DataTypeObject(
     std::unordered_map<String, DataTypePtr> typed_paths_,
     std::unordered_set<String> paths_to_skip_,
     std::vector<String> path_regexps_to_skip_,
+    std::unordered_set<String> paths_shared_only_,
+    std::vector<String> path_regexps_shared_only_,
     size_t max_dynamic_paths_,
     size_t max_dynamic_types_)
     : schema_format(schema_format_)
     , typed_paths(std::move(typed_paths_))
     , paths_to_skip(std::move(paths_to_skip_))
     , path_regexps_to_skip(std::move(path_regexps_to_skip_))
+    , paths_shared_only(std::move(paths_shared_only_))
+    , path_regexps_shared_only(std::move(path_regexps_shared_only_))
     , max_dynamic_paths(max_dynamic_paths_)
     , max_dynamic_types(max_dynamic_types_)
 {
@@ -77,6 +81,17 @@ DataTypeObject::DataTypeObject(
             throw Exception(ErrorCodes::CANNOT_COMPILE_REGEXP, "Invalid regexp '{}': {}", regexp_str, regexp.error());
     }
 
+    /// Check if SHARED_ONLY regular expressions are valid.
+    for (const auto & regexp_str : path_regexps_shared_only)
+    {
+        re2::RE2::Options options;
+        /// Don't log errors to stderr.
+        options.set_log_errors(false);
+        auto regexp = re2::RE2(regexp_str, options);
+        if (!regexp.ok())
+            throw Exception(ErrorCodes::CANNOT_COMPILE_REGEXP, "Invalid SHARED_ONLY regexp '{}': {}", regexp_str, regexp.error());
+    }
+
     for (const auto & [typed_path, type] : typed_paths)
     {
         for (const auto & path_to_skip : paths_to_skip)
@@ -89,6 +104,19 @@ DataTypeObject::DataTypeObject(
         {
             if (re2::RE2::FullMatch(typed_path, re2::RE2(path_regex_to_skip)))
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "Path '{}' is specified with the data type ('{}') and matches the SKIP REGEXP '{}'", typed_path, type->getName(), path_regex_to_skip);
+        }
+
+        /// Check conflicts with SHARED_ONLY paths
+        for (const auto & path_shared_only : paths_shared_only)
+        {
+            if (typed_path == path_shared_only)
+                throw Exception(ErrorCodes::BAD_ARGUMENTS, "Path '{}' is both explicitly typed and marked as SHARED_ONLY.", typed_path);
+        }
+
+        for (const auto & path_regex_shared_only : path_regexps_shared_only)
+        {
+            if (re2::RE2::FullMatch(typed_path, re2::RE2(path_regex_shared_only)))
+                throw Exception(ErrorCodes::BAD_ARGUMENTS, "Path '{}' is specified with the data type ('{}') and matches the SHARED_ONLY REGEXP '{}'", typed_path, type->getName(), path_regex_shared_only);
         }
     }
 }
@@ -117,6 +145,7 @@ bool DataTypeObject::equals(const IDataType & rhs) const
         }
 
         return schema_format == object->schema_format && paths_to_skip == object->paths_to_skip && path_regexps_to_skip == object->path_regexps_to_skip
+            && paths_shared_only == object->paths_shared_only && path_regexps_shared_only == object->path_regexps_shared_only
             && max_dynamic_types == object->max_dynamic_types && max_dynamic_paths == object->max_dynamic_paths;
     }
 
@@ -142,6 +171,8 @@ SerializationPtr DataTypeObject::doGetDefaultSerialization() const
                     std::move(typed_path_serializations),
                     paths_to_skip,
                     path_regexps_to_skip,
+                    paths_shared_only,
+                    path_regexps_shared_only,
                     getDynamicType(),
                     buildJSONExtractTree<SimdJSONParser>(getPtr(), "JSON serialization"));
 #endif
@@ -151,6 +182,8 @@ SerializationPtr DataTypeObject::doGetDefaultSerialization() const
                 std::move(typed_path_serializations),
                 paths_to_skip,
                 path_regexps_to_skip,
+                paths_shared_only,
+                path_regexps_shared_only,
                 getDynamicType(),
                 buildJSONExtractTree<RapidJSONParser>(getPtr(), "JSON serialization"));
 #else
@@ -158,6 +191,8 @@ SerializationPtr DataTypeObject::doGetDefaultSerialization() const
                 std::move(typed_path_serializations),
                 paths_to_skip,
                 path_regexps_to_skip,
+                paths_shared_only,
+                path_regexps_shared_only,
                 getDynamicType(),
                 buildJSONExtractTree<DummyJSONParser>(getPtr(), "JSON serialization"));
 #endif
@@ -220,6 +255,23 @@ String DataTypeObject::doGetName() const
     {
         write_separator();
         out << "SKIP REGEXP " << quoteString(skip_regexp);
+    }
+
+    std::vector<String> sorted_shared_only_paths;
+    sorted_shared_only_paths.reserve(paths_shared_only.size());
+    for (const auto & shared_only_path : paths_shared_only)
+        sorted_shared_only_paths.push_back(shared_only_path);
+    std::sort(sorted_shared_only_paths.begin(), sorted_shared_only_paths.end());
+    for (const auto & shared_only_path : sorted_shared_only_paths)
+    {
+        write_separator();
+        out << "SHARED_ONLY " << backQuoteIfNeed(shared_only_path);
+    }
+
+    for (const auto & shared_only_regexp : path_regexps_shared_only)
+    {
+        write_separator();
+        out << "SHARED_ONLY REGEXP " << quoteString(shared_only_regexp);
     }
 
     if (!first)
@@ -337,7 +389,7 @@ std::unique_ptr<ISerialization::SubstreamData> DataTypeObject::getDynamicSubcolu
 
         std::unique_ptr<SubstreamData> res = std::make_unique<SubstreamData>(std::make_shared<SerializationSubObject>(prefix, typed_paths_serializations, getDynamicType()));
         /// Keep all current constraints like limits and skip paths/prefixes/regexps.
-        res->type = std::make_shared<DataTypeObject>(schema_format, typed_sub_paths, paths_to_skip, path_regexps_to_skip, max_dynamic_paths, max_dynamic_types);
+        res->type = std::make_shared<DataTypeObject>(schema_format, typed_sub_paths, paths_to_skip, path_regexps_to_skip, paths_shared_only, path_regexps_shared_only, max_dynamic_paths, max_dynamic_types);
         /// If column was provided, we should create a column for the requested subcolumn.
         if (data.column)
         {
@@ -453,6 +505,8 @@ static DataTypePtr createObject(const ASTPtr & arguments, const DataTypeObject::
     std::unordered_map<String, DataTypePtr> typed_paths;
     std::unordered_set<String> paths_to_skip;
     std::vector<String> path_regexps_to_skip;
+    std::unordered_set<String> paths_shared_only;
+    std::vector<String> path_regexps_shared_only;
 
     size_t max_dynamic_types = DataTypeDynamic::DEFAULT_MAX_DYNAMIC_TYPES;
     size_t max_dynamic_paths = DataTypeObject::DEFAULT_MAX_SEPARATELY_STORED_PATHS;
@@ -510,10 +564,27 @@ static DataTypePtr createObject(const ASTPtr & arguments, const DataTypeObject::
 
             path_regexps_to_skip.push_back(literal->value.safeGet<String>());
         }
+        else if (object_type_argument->shared_only_path)
+        {
+            const auto * identifier = object_type_argument->shared_only_path->as<ASTIdentifier>();
+            if (!identifier)
+                throw Exception(ErrorCodes::UNEXPECTED_AST_STRUCTURE, "Unexpected AST in SHARED_ONLY section of {} type arguments: {}. Expected identifier with path name", magic_enum::enum_name(schema_format), object_type_argument->shared_only_path->formatForErrorMessage());
+
+            paths_shared_only.insert(identifier->name());
+        }
+        else if (object_type_argument->shared_only_path_regexp)
+        {
+            const auto * literal = object_type_argument->shared_only_path_regexp->as<ASTLiteral>();
+            if (!literal || literal->value.getType() != Field::Types::String)
+                throw Exception(ErrorCodes::UNEXPECTED_AST_STRUCTURE, "Unexpected AST in SHARED_ONLY section of {} type arguments: {}. Expected string literal with regexp", magic_enum::enum_name(schema_format), object_type_argument->shared_only_path_regexp->formatForErrorMessage());
+
+            path_regexps_shared_only.push_back(literal->value.safeGet<String>());
+        }
     }
 
     std::sort(path_regexps_to_skip.begin(), path_regexps_to_skip.end());
-    return std::make_shared<DataTypeObject>(schema_format, std::move(typed_paths), std::move(paths_to_skip), std::move(path_regexps_to_skip), max_dynamic_paths, max_dynamic_types);
+    std::sort(path_regexps_shared_only.begin(), path_regexps_shared_only.end());
+    return std::make_shared<DataTypeObject>(schema_format, std::move(typed_paths), std::move(paths_to_skip), std::move(path_regexps_to_skip), std::move(paths_shared_only), std::move(path_regexps_shared_only), max_dynamic_paths, max_dynamic_types);
 }
 
 const DataTypePtr & DataTypeObject::getTypeOfSharedData()

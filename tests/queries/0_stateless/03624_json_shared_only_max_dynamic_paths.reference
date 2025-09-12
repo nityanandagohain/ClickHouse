@@ -1,0 +1,3 @@
+1	2023-01-01	1.0	value1	value2
+2	2	['dynamic1','meta.version']	['dynamic2','meta.timestamp']
+2	2	['dynamic1','meta.version']	['dynamic2','meta.timestamp']

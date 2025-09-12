@@ -66,6 +66,8 @@ public:
         std::unordered_map<String, SerializationPtr> typed_path_serializations_,
         const std::unordered_set<String> & paths_to_skip_,
         const std::vector<String> & path_regexps_to_skip_,
+        const std::unordered_set<String> & paths_shared_only_,
+        const std::vector<String> & path_regexps_shared_only_,
         const DataTypePtr & dynamic_type_);
 
     void enumerateStreams(
@@ -158,11 +160,15 @@ private:
 
 protected:
     bool shouldSkipPath(const String & path) const;
+    bool shouldForceSharedOnly(const String & path) const;
 
     std::unordered_map<String, SerializationPtr> typed_path_serializations;
     std::unordered_set<String> paths_to_skip;
     std::vector<String> sorted_paths_to_skip;
     std::list<re2::RE2> path_regexps_to_skip;
+    std::unordered_set<String> paths_shared_only;
+    std::vector<String> sorted_paths_shared_only;
+    std::list<re2::RE2> path_regexps_shared_only;
     DataTypePtr dynamic_type;
     SerializationPtr dynamic_serialization;
 

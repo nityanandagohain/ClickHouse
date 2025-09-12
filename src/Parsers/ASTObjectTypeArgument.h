@@ -18,6 +18,8 @@ public:
     ASTPtr path_with_type;
     ASTPtr skip_path;
     ASTPtr skip_path_regexp;
+    ASTPtr shared_only_path;
+    ASTPtr shared_only_path_regexp;
     ASTPtr parameter;
 
     /** Get the text that identifies this element. */

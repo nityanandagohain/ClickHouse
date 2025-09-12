@@ -1,0 +1,3 @@
+1	2	['dynamic1']	['meta.timestamp','x.y']
+1	2	['dynamic1']	['meta.timestamp','x.y']
+100	shared_value	2023-01-01	value1

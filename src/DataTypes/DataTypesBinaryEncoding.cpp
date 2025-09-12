@@ -559,6 +559,14 @@ void encodeDataType(const DataTypePtr & type, WriteBuffer & buf)
             writeVarUInt(path_regexps_to_skip.size(), buf);
             for (const auto & regexp : path_regexps_to_skip)
                 writeStringBinary(regexp, buf);
+            const auto & paths_shared_only = object_type.getPathsSharedOnly();
+            writeVarUInt(paths_shared_only.size(), buf);
+            for (const auto & path : paths_shared_only)
+                writeStringBinary(path, buf);
+            const auto & path_regexps_shared_only = object_type.getPathRegexpsSharedOnly();
+            writeVarUInt(path_regexps_shared_only.size(), buf);
+            for (const auto & regexp : path_regexps_shared_only)
+                writeStringBinary(regexp, buf);
             break;
         }
         default:
@@ -846,11 +854,40 @@ DataTypePtr decodeDataType(ReadBuffer & buf)
                 readStringBinary(regexp, buf);
                 path_regexps_to_skip.push_back(regexp);
             }
+            size_t paths_shared_only_size;
+            readVarUInt(paths_shared_only_size, buf);
+            if (paths_shared_only_size > MAX_ARRAY_SIZE)
+                throw Exception(ErrorCodes::INCORRECT_DATA, "Too many shared only paths during JSON type decoding: {}. Maximum: {}", paths_shared_only_size, MAX_ARRAY_SIZE);
+
+            std::unordered_set<String> paths_shared_only;
+            paths_shared_only.reserve(paths_shared_only_size);
+            for (size_t i = 0; i != paths_shared_only_size; ++i)
+            {
+                String path;
+                readStringBinary(path, buf);
+                paths_shared_only.insert(path);
+            }
+
+            size_t path_regexps_shared_only_size;
+            readVarUInt(path_regexps_shared_only_size, buf);
+            if (path_regexps_shared_only_size > MAX_ARRAY_SIZE)
+                throw Exception(ErrorCodes::INCORRECT_DATA, "Too many shared only path regexps during JSON type decoding: {}. Maximum: {}", path_regexps_shared_only_size, MAX_ARRAY_SIZE);
+
+            std::vector<String> path_regexps_shared_only;
+            path_regexps_shared_only.reserve(path_regexps_shared_only_size);
+            for (size_t i = 0; i != path_regexps_shared_only_size; ++i)
+            {
+                String regexp;
+                readStringBinary(regexp, buf);
+                path_regexps_shared_only.push_back(regexp);
+            }
             return std::make_shared<DataTypeObject>(
                 DataTypeObject::SchemaFormat::JSON,
                 typed_paths,
                 paths_to_skip,
                 path_regexps_to_skip,
+                paths_shared_only,
+                path_regexps_shared_only,
                 max_dynamic_paths,
                 max_dynamic_types);
         }

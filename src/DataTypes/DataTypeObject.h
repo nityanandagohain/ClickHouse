@@ -26,6 +26,8 @@ public:
         std::unordered_map<String, DataTypePtr> typed_paths_ = {},
         std::unordered_set<String> paths_to_skip_ = {},
         std::vector<String> path_regexps_to_skip_ = {},
+        std::unordered_set<String> paths_shared_only_ = {},
+        std::vector<String> path_regexps_shared_only_ = {},
         size_t max_dynamic_paths_ = DEFAULT_MAX_SEPARATELY_STORED_PATHS,
         size_t max_dynamic_types_ = DataTypeDynamic::DEFAULT_MAX_DYNAMIC_TYPES);
 
@@ -62,6 +64,8 @@ public:
     const std::unordered_map<String, DataTypePtr> & getTypedPaths() const { return typed_paths; }
     const std::unordered_set<String> & getPathsToSkip() const { return paths_to_skip; }
     const std::vector<String> & getPathRegexpsToSkip() const { return path_regexps_to_skip; }
+    const std::unordered_set<String> & getPathsSharedOnly() const { return paths_shared_only; }
+    const std::vector<String> & getPathRegexpsSharedOnly() const { return path_regexps_shared_only; }
 
     size_t getMaxDynamicTypes() const { return max_dynamic_types; }
     size_t getMaxDynamicPaths() const { return max_dynamic_paths; }
@@ -84,6 +88,10 @@ private:
     std::unordered_set<String> paths_to_skip;
     /// List of regular expressions that should be used to skip paths during data parsing.
     std::vector<String> path_regexps_to_skip;
+    /// Set of paths that should be stored in shared data only.
+    std::unordered_set<String> paths_shared_only;
+    /// List of regular expressions for paths that should be stored in shared data only.
+    std::vector<String> path_regexps_shared_only;
     /// Limit on the number of paths that can be stored as subcolumn.
     size_t max_dynamic_paths;
     /// Limit of dynamic types that should be used for Dynamic columns.
