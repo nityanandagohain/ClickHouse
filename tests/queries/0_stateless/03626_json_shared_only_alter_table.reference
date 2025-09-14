@@ -1,0 +1,5 @@
+2	0	['debug.level','meta.timestamp']	[]
+2	0	['debug.trace','meta.version']	[]
+0	2	[]	['debug.level','meta.timestamp']
+1	1	['meta.version']	['debug.trace']
+0	3	[]	['debug.level','debug.trace','meta.timestamp']

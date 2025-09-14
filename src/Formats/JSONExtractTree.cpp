@@ -1759,10 +1759,13 @@ public:
         std::unordered_map<String, std::unique_ptr<JSONExtractTreeNode<JSONParser>>> typed_path_nodes_,
         const std::unordered_set<String> & paths_to_skip_,
         const std::vector<String> & path_regexps_to_skip_,
+        const std::unordered_set<String> & paths_shared_only_,
+        const std::vector<String> & path_regexps_shared_only_,
         const DataTypePtr & type_of_nested_objects)
         : typed_paths_types(typed_paths_types_)
         , typed_path_nodes(std::move(typed_path_nodes_))
         , paths_to_skip(paths_to_skip_)
+        , paths_shared_only(paths_shared_only_)
         , dynamic_node(std::make_unique<DynamicNode<JSONParser>>(type_of_nested_objects))
         , dynamic_serialization(std::make_shared<SerializationDynamic>())
     {
@@ -1770,6 +1773,11 @@ public:
         std::sort(sorted_paths_to_skip.begin(), sorted_paths_to_skip.end());
         for (const auto & regexp : path_regexps_to_skip_)
             path_regexps_to_skip.emplace_back(regexp);
+        
+        sorted_paths_shared_only.assign(paths_shared_only.begin(), paths_shared_only.end());
+        std::sort(sorted_paths_shared_only.begin(), sorted_paths_shared_only.end());
+        for (const auto & regexp : path_regexps_shared_only_)
+            path_regexps_shared_only.emplace_back(regexp);
     }
 
     bool insertResultToColumn(IColumn & column, const typename JSONParser::Element & element, const JSONExtractInsertSettings & insert_settings, const FormatSettings & format_settings, String & error) const override
@@ -1929,6 +1937,29 @@ private:
         else if (element.isNull())
         {
         }
+        /// Check if this path should be forced to shared data (SHARED_ONLY).
+        else if (shouldForceSharedOnly(current_path))
+        {
+            if (!tmp_dynamic_column)
+                tmp_dynamic_column = ColumnDynamic::create();
+
+            JSONExtractInsertSettings insert_settings_for_shared_data = insert_settings;
+            /// We use single temporary Dynamic column for all shared data paths because
+            /// creating it every time is very slow. And so we need to always infer
+            /// new type for new value and don't reuse existing variants.
+            insert_settings_for_shared_data.try_existing_variants_in_dynamic_first = false;
+            if (!dynamic_node->insertResultToColumn(*tmp_dynamic_column, element, insert_settings_for_shared_data, format_settings, error))
+            {
+                error += fmt::format(" (while reading path {})", current_path);
+                return false;
+            }
+
+            paths_and_values_for_shared_data.emplace_back(current_path, "");
+            WriteBufferFromString buf(paths_and_values_for_shared_data.back().second);
+            /// Use default format settings for binary serialization. Non-default settings may change
+            /// the binary representation of the values and break the future deserialization.
+            dynamic_serialization->serializeBinary(*tmp_dynamic_column, tmp_dynamic_column->size() - 1, buf, getDefaultFormatSettings());
+        }
         /// Try to add a new dynamic path.
         else if (auto * dynamic_column = column_object.tryToAddNewDynamicPath(current_path))
         {
@@ -1986,6 +2017,27 @@ private:
         return false;
     }
 
+    bool shouldForceSharedOnly(const String & path) const
+    {
+        if (paths_shared_only.contains(path))
+            return true;
+
+        if (!sorted_paths_shared_only.empty())
+        {
+            auto it = std::lower_bound(sorted_paths_shared_only.begin(), sorted_paths_shared_only.end(), path);
+            if (it != sorted_paths_shared_only.end() && it != sorted_paths_shared_only.begin() && path.starts_with(*std::prev(it)))
+                return true;
+        }
+
+        for (const auto & regexp : path_regexps_shared_only)
+        {
+            if (re2::RE2::FullMatch(path, regexp))
+                return true;
+        }
+
+        return false;
+    }
+
     const FormatSettings & getDefaultFormatSettings() const
     {
         static const FormatSettings settings;
@@ -1997,6 +2049,9 @@ private:
     std::unordered_set<String> paths_to_skip;
     std::vector<String> sorted_paths_to_skip;
     std::list<re2::RE2> path_regexps_to_skip;
+    std::unordered_set<String> paths_shared_only;
+    std::vector<String> sorted_paths_shared_only;
+    std::list<re2::RE2> path_regexps_shared_only;
     std::unique_ptr<DynamicNode<JSONParser>> dynamic_node;
     std::shared_ptr<SerializationDynamic> dynamic_serialization;
 };
@@ -2172,6 +2227,8 @@ std::unique_ptr<JSONExtractTreeNode<JSONParser>> buildJSONExtractTree(const Data
                         std::move(typed_path_nodes),
                         object_type.getPathsToSkip(),
                         object_type.getPathRegexpsToSkip(),
+                        object_type.getPathsSharedOnly(),
+                        object_type.getPathRegexpsSharedOnly(),
                         object_type.getTypeOfNestedObjects());
             }
         }

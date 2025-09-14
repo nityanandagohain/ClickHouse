@@ -85,6 +85,35 @@ private:
             return true;
         }
 
+        /// SHARED_ONLY arguments
+        if (ParserKeyword(Keyword::SHARED_ONLY).ignore(pos))
+        {
+            /// SHARED_ONLY REGEXP '<some_regexp>'
+            if (ParserKeyword(Keyword::REGEXP).ignore(pos))
+            {
+                ParserStringLiteral literal_parser;
+                ASTPtr literal;
+                if (!literal_parser.parse(pos, literal, expected))
+                    return false;
+                argument->shared_only_path_regexp = literal;
+                argument->children.push_back(argument->shared_only_path_regexp);
+            }
+            /// SHARED_ONLY some.path
+            else
+            {
+                ParserCompoundIdentifier compound_identifier_parser;
+                ASTPtr compound_identifier;
+                if (!compound_identifier_parser.parse(pos, compound_identifier, expected))
+                    return false;
+
+                argument->shared_only_path = compound_identifier;
+                argument->children.push_back(argument->shared_only_path);
+            }
+
+            node = argument;
+            return true;
+        }
+
         ParserCompoundIdentifier compound_identifier_parser;
         ASTPtr identifier;
         if (!compound_identifier_parser.parse(pos, identifier, expected))
